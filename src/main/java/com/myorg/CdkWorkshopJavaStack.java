@@ -1,12 +1,16 @@
 package com.myorg;
 
+import io.github.cdklabs.dynamotableviewer.TableViewer;
+
 import software.constructs.Construct;
-import software.amazon.awscdk.Duration;
 import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.StackProps;
-import software.amazon.awscdk.services.sns.Topic;
-import software.amazon.awscdk.services.sns.subscriptions.SqsSubscription;
-import software.amazon.awscdk.services.sqs.Queue;
+
+import software.amazon.awscdk.services.lambda.Code;
+import software.amazon.awscdk.services.lambda.Function;
+import software.amazon.awscdk.services.lambda.Runtime;
+
+import software.amazon.awscdk.services.apigateway.LambdaRestApi;
 
 public class CdkWorkshopJavaStack extends Stack {
     public CdkWorkshopJavaStack(final Construct parent, final String id) {
@@ -16,14 +20,28 @@ public class CdkWorkshopJavaStack extends Stack {
     public CdkWorkshopJavaStack(final Construct parent, final String id, final StackProps props) {
         super(parent, id, props);
 
-        final Queue queue = Queue.Builder.create(this, "CdkWorkshopJavaQueue")
-                .visibilityTimeout(Duration.seconds(300))
-                .build();
-
-        final Topic topic = Topic.Builder.create(this, "CdkWorkshopJavaTopic")
-            .displayName("My First Topic Yeah")
+        // Defines a new lambda resource
+        final Function hello = Function.Builder.create(this, "HelloHandler")
+            .runtime(Runtime.NODEJS_16_X) // Execution environment
+            .code(Code.fromAsset("lambda")) // code loaded from lambda directory
+            .handler("hello.handler") // file is "hello", function is "handler"
             .build();
 
-        topic.addSubscription(new SqsSubscription(queue));
+        // Defines our hitcounter resource
+        final HitCounter helloWithCounter = new HitCounter(this, "HelloHitCounter", HitCounterProps.builder()
+            .downstream(hello)
+            .build());
+
+        // Defines an API Gateway REST API resource backed by our "hello" function
+        LambdaRestApi.Builder.create(this, "Endpoint")
+            .handler(helloWithCounter.getHandler())
+            .build();
+
+        // Defines a viewer for the HitCounts table
+        TableViewer.Builder.create(this, "ViewerHitCount")
+            .title("Hello Hits")
+            .table(helloWithCounter.getTable())
+            .build();
+
     }
 }
